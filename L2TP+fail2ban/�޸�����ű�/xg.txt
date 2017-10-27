@@ -1,0 +1,43 @@
+#!/bin/bash
+PPP_FILE=/etc/ppp/chap-secrets
+XL2TPD_FILE=/var/log/xl2tpd.log
+SENDINFO=/data/vpn/weixin-info
+SECRETE()
+{
+tr -dc _A-Z-a-z-0-9 < /dev/urandom | head -c${1:-32}
+}
+LOG_TIME ()
+{
+while true
+do
+if [[ `date +%H%M` -eq $EX_TIME ]];then
+for ((i="$MINUTE";i<"$EX_MINUTE";i++))
+do
+LOG_TIME=`awk '$3~/'$HOUR':'$i'/{print $0}' $XL2TPD_FILE`
+START_NAME=$(echo "$LOG_TIME"|grep -Po '(?<=username: )[^ ]+(?= Start connection)')
+if [[ -n $START_NAME ]];then
+exit
+elif [[ `date +%M` -eq $EX_MINUTE ]];then
+sed -i "/$ER_NAME/s/$ER_SECRETE/`SECRETE`/g" $PPP_FILE
+exit
+else
+continue
+fi
+done
+fi
+done
+}
+tail -fn0 $XL2TPD_FILE|while read line
+do
+if [[ $line =~ "failed CHAP authentication" ]];then
+sleep 10
+ER_NAME=$(echo "$line"|grep -Po '(?<=Peer )[^ ]+(?= failed CHAP authentication)')
+ER_SECRETE=`awk '$1~/'${ER_NAME}'/{print $3}' $PPP_FILE`
+HOUR=`date +%H`
+MINUTE=`date +%M`
+TIME=`date +%H%M`
+EX_TIME=`expr $TIME + 3`
+EX_MINUTE=`expr $MINUTE + 3`
+LOG_TIME &
+fi
+done
